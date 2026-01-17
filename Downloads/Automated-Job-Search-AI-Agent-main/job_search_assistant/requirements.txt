@@ -1,0 +1,17 @@
+streamlit
+python-dotenv
+langchain
+openai
+crewai
+spacy
+pandas
+requests
+beautifulsoup4
+PyPDF2
+python-docx
+faiss-cpu
+langchain-community
+langchain-openai
+langchain-text-splitters
+tiktoken
+pypdf
