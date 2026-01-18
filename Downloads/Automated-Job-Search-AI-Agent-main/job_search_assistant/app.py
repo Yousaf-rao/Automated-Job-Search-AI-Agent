@@ -335,26 +335,41 @@ def main():
         
         if search_btn:
             with st.spinner(f"Searching for {query} jobs in {location}..."):
-                searcher = SerpApiSearcher()
+                from utils.job_scraper import JobScraper
+                scraper = JobScraper()
                 
-                # Platform logic
-                selected_platform = "All" # Simplified for this UI as it handles multiple internally if needed
+                all_results = []
+                # platforms is a list from multiselect, e.g. ['Indeed', 'LinkedIn']
+                for platform_name in platforms: 
+                    # Note: JobScraper handles each platform individually in its search_jobs method 
+                    # if we pass the platform name.
+                    platform_results = scraper.search_jobs(
+                        keywords=query, 
+                        location=location, 
+                        platform=platform_name, 
+                        count=limit
+                    )
+                    if platform_results:
+                        all_results.extend(platform_results)
                 
-                results = searcher.search_jobs(query=query, location=location, platform=selected_platform, count=limit)
+                results = all_results
                 
                 if results:
                     st.success(f"Found {len(results)} jobs!")
-                    for job in results:
+                    for i, job in enumerate(results):
                         with st.expander(f"{job['title']} at {job['company']}"):
                             st.markdown(f"**Location:** {job['location']}")
                             st.markdown(f"**Platform:** {job['platform']}")
-                            st.markdown(job.get('snippet', ''))
+                            # Use 'description' if 'snippet' is missing (JobScraper uses description)
+                            st.markdown(job.get('snippet', job.get('description', 'No description available.')))
                             
                             col_apply, col_save = st.columns([1, 4])
                             with col_apply:
-                                st.markdown(f"[👉 Apply Now]({job['apply_link']})")
+                                # JobScraper uses 'link', SerpApi used 'apply_link'
+                                link = job.get('apply_link', job.get('link', '#'))
+                                st.markdown(f"[👉 Apply Now]({link})")
                             with col_save:
-                                if st.button("💾 Save Job", key=f"save_{job.get('link', job['title'])}"):
+                                if st.button("💾 Save Job", key=f"save_{i}_{job.get('link', job['title'])}"):
                                     saved = st.session_state.storage.save_job(job)
                                     if saved:
                                         st.toast(f"Saved: {job['title']}", icon="✅")

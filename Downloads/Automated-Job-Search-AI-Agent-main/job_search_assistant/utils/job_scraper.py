@@ -13,6 +13,10 @@ class JobScraper:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
         
+        # Initialize session for efficient connection pooling
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+        
         # Initialize platform-specific settings
         self.platforms = {
             "LinkedIn": {
@@ -31,6 +35,40 @@ class JobScraper:
                 "base_url": "https://www.monster.com"
             }
         }
+    
+    def verify_url(self, url, timeout=5):
+        """
+        Verify that a URL is reachable and returns a valid status code.
+        
+        Args:
+            url (str): The URL to verify
+            timeout (int): Request timeout in seconds (default: 5)
+            
+        Returns:
+            bool: True if URL is reachable (status < 400), False otherwise
+        """
+        try:
+            # Use HEAD request for efficiency (doesn't download body)
+            response = self.session.head(url, timeout=timeout, allow_redirects=True)
+            
+            # Check if status code indicates success (< 400)
+            if response.status_code < 400:
+                return True
+            
+            # If HEAD fails, try GET as some servers don't support HEAD
+            response = self.session.get(url, timeout=timeout, allow_redirects=True)
+            return response.status_code < 400
+            
+        except (requests.exceptions.ConnectionError, 
+                requests.exceptions.Timeout,
+                requests.exceptions.RequestException) as e:
+            # Log the error for debugging (optional)
+            print(f"URL verification failed for {url}: {str(e)}")
+            return False
+        except Exception as e:
+            # Catch any unexpected errors
+            print(f"Unexpected error verifying URL {url}: {str(e)}")
+            return False
 
     def search_jobs(self, keywords, location, platform="Indeed", count=5):
         """Search for jobs across selected platforms."""
@@ -60,6 +98,11 @@ class JobScraper:
             # Create search URL
             search_url = f"https://www.indeed.com/jobs?q={keyword_param}&l={location_param}&sort=date"
             
+            # Verify the search URL is reachable
+            if not self.verify_url(search_url):
+                print(f"Search URL not reachable, using base URL instead")
+                search_url = self.platforms["Indeed"]["base_url"]
+            
             # Create fallback job listings (Mock Data as per screenshots)
             jobs = []
             
@@ -87,21 +130,49 @@ class JobScraper:
             return []
 
     def search_linkedin(self, keywords, location, count=5):
-        """Mock LinkedIn search."""
-        return self._generate_mock_jobs(keywords, location, "LinkedIn", count)
+        """Mock LinkedIn search with URL verification."""
+        keyword_param = keywords.replace(" ", "%20")
+        location_param = location.replace(" ", "%20")
+        search_url = f"https://www.linkedin.com/jobs/search/?keywords={keyword_param}&location={location_param}"
+        
+        # Verify URL
+        if not self.verify_url(search_url):
+            search_url = self.platforms["LinkedIn"]["base_url"]
+        
+        return self._generate_mock_jobs(keywords, location, "LinkedIn", count, search_url)
 
     def search_glassdoor(self, keywords, location, count=5):
-        """Mock Glassdoor search."""
-        return self._generate_mock_jobs(keywords, location, "Glassdoor", count)
+        """Mock Glassdoor search with URL verification."""
+        keyword_param = keywords.replace(" ", "-")
+        location_param = location.replace(" ", "-")
+        search_url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={keyword_param}&locT=C&locId={location_param}"
+        
+        # Verify URL
+        if not self.verify_url(search_url):
+            search_url = self.platforms["Glassdoor"]["base_url"]
+        
+        return self._generate_mock_jobs(keywords, location, "Glassdoor", count, search_url)
 
     def search_monster(self, keywords, location, count=5):
-        """Mock Monster search."""
-        return self._generate_mock_jobs(keywords, location, "Monster", count)
+        """Mock Monster search with URL verification."""
+        keyword_param = keywords.replace(" ", "-")
+        location_param = location.replace(" ", "-")
+        search_url = f"https://www.monster.com/jobs/search?q={keyword_param}&where={location_param}"
+        
+        # Verify URL
+        if not self.verify_url(search_url):
+            search_url = self.platforms["Monster"]["base_url"]
+        
+        return self._generate_mock_jobs(keywords, location, "Monster", count, search_url)
 
-    def _generate_mock_jobs(self, keywords, location, platform, count):
+    def _generate_mock_jobs(self, keywords, location, platform, count, search_url=None):
         """Helper to generate mock data for other platforms."""
         jobs = []
         companies = ["Startup Inc", "Tech Corp", "Data Systems", "Cloud Solutions", "AI Frontiers"]
+        
+        # Use provided search_url or construct default
+        if search_url is None:
+            search_url = f"https://www.{platform.lower()}.com/jobs"
         
         for i in range(min(count, 5)):
             job = {
@@ -109,7 +180,7 @@ class JobScraper:
                 "company": random.choice(companies),
                 "location": location,
                 "platform": platform,
-                "link": f"https://www.{platform.lower()}.com/jobs",
+                "link": search_url,
                 "posted_date": datetime.now().strftime("%Y-%m-%d"),
                 "description": f"Great job opportunity on {platform}.",
                 "salary": "Competitive"
