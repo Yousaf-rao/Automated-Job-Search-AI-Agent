@@ -12,6 +12,27 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 
+# Scraper Configuration
+REQUEST_TIMEOUT = 10
+MAX_RETRIES = 3
+CACHE_TTL = 3600  # 1 hour
+request_delay = (1, 3)  # Random delay between requests
+
+# Mock Data Configuration
+SALARY_RANGES = {
+    "Junior": "$70k - $100k",
+    "Mid": "$100k - $140k",
+    "Senior": "$140k - $200k",
+    "Lead": "$180k - $250k",
+    "Manager": "$160k - $230k"
+}
+
+JOB_TITLES = {
+    "Software Engineer": ["Frontend Developer", "Backend Developer", "Full Stack Engineer", "DevOps Engineer"],
+    "Data Scientist": ["Machine Learning Engineer", "AI Researcher", "Data Analyst", "Data Engineer"],
+    "Product Manager": ["Technical Product Manager", "Product Owner", "Associate PM", "Group PM"],
+}
+
 # App Configuration
 APP_TITLE = "Aura AI: Career Architect"
 APP_ICON = "⚡"

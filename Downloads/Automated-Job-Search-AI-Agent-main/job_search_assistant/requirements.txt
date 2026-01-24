@@ -15,3 +15,6 @@ langchain-openai
 langchain-text-splitters
 tiktoken
 pypdf
+tenacity
+cachetools
+typing-extensions

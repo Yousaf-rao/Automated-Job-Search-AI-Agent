@@ -1,0 +1,21 @@
+19:03:02 - JobSearchAssistant - WARNING - URL verification failed for https://this-domain-does-not-exist-xyz123.com: HTTPSConnectionPool(host='this-domain-does-not-exist-xyz123.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x000001DFD106E8D0>: Failed to resolve 'this-domain-does-not-exist-xyz123.com' ([Errno 11001] getaddrinfo failed)"))
+19:03:05 - JobSearchAssistant - INFO - Searching for Python Developer in Remote on Indeed
+19:03:10 - JobSearchAssistant - INFO - Searching for Software Engineer in New York on Indeed
+19:03:13 - JobSearchAssistant - INFO - Searching for Software Engineer in New York on LinkedIn
+19:03:14 - JobSearchAssistant - INFO - Searching for Software Engineer in New York on Glassdoor
+19:03:17 - JobSearchAssistant - INFO - Searching for Software Engineer in New York on Monster
+19:29:08 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Indeed
+19:29:09 - JobSearchAssistant - INFO - Searching for Data Scientist in India on LinkedIn
+19:29:10 - JobSearchAssistant - INFO - Searching for Data Scientist in India on ZipRecruiter
+19:29:12 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Glassdoor
+19:29:13 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Monster
+19:29:40 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Indeed
+19:29:42 - JobSearchAssistant - INFO - Searching for Data Scientist in India on LinkedIn
+19:29:43 - JobSearchAssistant - INFO - Searching for Data Scientist in India on ZipRecruiter
+19:29:44 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Glassdoor
+19:29:46 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Monster
+19:29:50 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Indeed
+19:30:34 - JobSearchAssistant - INFO - Searching for Data Scientist in India on Indeed
+19:30:43 - JobSearchAssistant - INFO - Searching for Product Manager in United Kingdom on Indeed
+19:31:02 - JobSearchAssistant - INFO - Searching for Product Manager in United Kingdom on Indeed
+19:31:25 - JobSearchAssistant - INFO - Searching for Product Manager in Remote on Indeed

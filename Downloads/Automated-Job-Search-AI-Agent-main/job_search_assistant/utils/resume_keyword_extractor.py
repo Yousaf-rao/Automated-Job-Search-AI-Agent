@@ -15,7 +15,7 @@ class ResumeKeywordExtractor:
         Initialize the extractor with comprehensive lists of technical keywords.
         These lists are categorized to help organize the extracted information.
         """
-        
+         
         # 1. Job Titles: Common titles to look for in the candidate's history or objective.
         self.job_titles = [
             "software engineer", "software developer", "web developer",
