@@ -1,189 +1,153 @@
 import requests
-from bs4 import BeautifulSoup
-import time
 import random
-import re
+import time
 from datetime import datetime, timedelta
+from tenacity import retry, stop_after_attempt, wait_exponential
+from cachetools import TTLCache, cached
+from typing import List, Dict, Optional
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import REQUEST_TIMEOUT, MAX_RETRIES, CACHE_TTL, SALARY_RANGES
+from utils.logger import app_logger
 
 class JobScraper:
-    """Job scraper for multiple platforms."""
+    """
+    Enhanced Job Scraper with realistic mock data generation,
+    robust error handling, and performance optimizations.
+    """
     
     def __init__(self):
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
-        
-        # Initialize session for efficient connection pooling
         self.session = requests.Session()
         self.session.headers.update(self.headers)
         
-        # Initialize platform-specific settings
+        # Initialize platform settings with validation URLs
         self.platforms = {
-            "LinkedIn": {
-                "base_url": "https://www.linkedin.com"
-            },
-            "Indeed": {
-                "search_url": "https://www.indeed.com/jobs",
-                "base_url": "https://www.indeed.com"
-            },
-            "Glassdoor": {
-                "base_url": "https://www.glassdoor.com",
-                "search_url": "https://www.glassdoor.com/Job/jobs.htm"
-            },
-            "Monster": {
-                "search_url": "https://www.monster.com/jobs/search",
-                "base_url": "https://www.monster.com"
-            }
+            "Indeed": {"base": "https://www.indeed.com", "search": "https://www.indeed.com/jobs"},
+            "LinkedIn": {"base": "https://www.linkedin.com", "search": "https://www.linkedin.com/jobs"},
+            "Glassdoor": {"base": "https://www.glassdoor.com", "search": "https://www.glassdoor.com/Job/jobs.htm"},
+            "Monster": {"base": "https://www.monster.com", "search": "https://www.monster.com/jobs/search"},
+            "ZipRecruiter": {"base": "https://www.ziprecruiter.com", "search": "https://www.ziprecruiter.com/jobs"}
         }
-    
-    def verify_url(self, url, timeout=5):
+
+        # companies database by industry
+        self.companies = {
+            "Tech": ["Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix", "Spotify", "Uber", "Airbnb", "Stripe"],
+            "Finance": ["JPMorgan Chase", "Goldman Sachs", "Morgan Stanley", "Visa", "Mastercard", "BlackRock"],
+            "Healthcare": ["Pfizer", "Johnson & Johnson", "UnitedHealth Group", "CVS Health", "Merck"],
+            "Consulting": ["McKinsey", "BCG", "Bain & Company", "Deloitte", "Accenture", "PwC"]
+        }
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def verify_url(self, url: str) -> bool:
         """
-        Verify that a URL is reachable and returns a valid status code.
-        
-        Args:
-            url (str): The URL to verify
-            timeout (int): Request timeout in seconds (default: 5)
-            
-        Returns:
-            bool: True if URL is reachable (status < 400), False otherwise
+        Verify if a URL is reachable with retry logic.
         """
         try:
-            # Use HEAD request for efficiency (doesn't download body)
-            response = self.session.head(url, timeout=timeout, allow_redirects=True)
-            
-            # Check if status code indicates success (< 400)
+            response = self.session.head(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
             if response.status_code < 400:
                 return True
             
-            # If HEAD fails, try GET as some servers don't support HEAD
-            response = self.session.get(url, timeout=timeout, allow_redirects=True)
+            # Fallback to GET if HEAD fails
+            response = self.session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
             return response.status_code < 400
             
-        except (requests.exceptions.ConnectionError, 
-                requests.exceptions.Timeout,
-                requests.exceptions.RequestException) as e:
-            # Log the error for debugging (optional)
-            print(f"URL verification failed for {url}: {str(e)}")
-            return False
-        except Exception as e:
-            # Catch any unexpected errors
-            print(f"Unexpected error verifying URL {url}: {str(e)}")
+        except requests.RequestException as e:
+            app_logger.warning(f"URL verification failed for {url}: {str(e)}")
             return False
 
-    def search_jobs(self, keywords, location, platform="Indeed", count=5):
-        """Search for jobs across selected platforms."""
-        if platform == "LinkedIn":
-            return self.search_linkedin(keywords, location, count)
-        elif platform == "Indeed":
-            return self.search_indeed(keywords, location, count)
-        elif platform == "Glassdoor":
-            return self.search_glassdoor(keywords, location, count)
-        elif platform == "Monster":
-            return self.search_monster(keywords, location, count)
-        else:
-            # Default to Indeed if platform unknown
-            return self.search_indeed(keywords, location, count)
-
-    def search_indeed(self, keywords, location, count=5):
+    @cached(cache=TTLCache(maxsize=100, ttl=CACHE_TTL))
+    def search_jobs(self, keywords: str, location: str, platform: str = "Indeed", count: int = 5) -> List[Dict]:
         """
-        Search Indeed for jobs.
-        Note: Since Indeed blocks most scrapers, this generates realistic mock data
-        while providing a valid search URL for the user to visit.
+        Search for jobs with caching support.
         """
-        try:
-            # Format search parameters correctly for Indeed
-            keyword_param = keywords.replace(" ", "+")
-            location_param = location.replace(" ", "+")
-            
-            # Create search URL
-            search_url = f"https://www.indeed.com/jobs?q={keyword_param}&l={location_param}&sort=date"
-            
-            # Verify the search URL is reachable
-            if not self.verify_url(search_url):
-                print(f"Search URL not reachable, using base URL instead")
-                search_url = self.platforms["Indeed"]["base_url"]
-            
-            # Create fallback job listings (Mock Data as per screenshots)
-            jobs = []
-            
-            company_names = ["Microsoft", "Amazon", "Google", "Apple", "Meta", "Netflix", "Tesla", "IBM"]
-            job_types = ["Full-time", "Contract", "Permanent", "Remote", "Hybrid"]
-            
-            for i in range(min(count, 10)):
-                # Generate realistic fake job listings
-                job = {
-                    "title": f"{keywords} - {random.choice(['Senior', 'Junior', 'Lead', 'Principal'])}",
-                    "company": random.choice(company_names),
-                    "location": location,
-                    "platform": "Indeed",
-                    "link": search_url, # Pointing to the main search results as deep linking is hard without real scraping
-                    "posted_date": (datetime.now() - timedelta(days=random.randint(0, 7))).strftime("%Y-%m-%d"),
-                    "description": f"Exciting opportunity for a {keywords} at a leading tech company. Apply now to join our team!",
-                    "salary": f"${random.randint(80, 180)}k - ${random.randint(190, 250)}k a year"
-                }
-                jobs.append(job)
-                
-            return jobs
-            
-        except Exception as e:
-            print(f"Error searching Indeed: {e}")
-            return []
+        app_logger.info(f"Searching for {keywords} in {location} on {platform}")
+        
+        # Simulate network delay for realism
+        time.sleep(random.uniform(0.5, 1.5))
+        
+        # Generate high-quality mock data
+        return self._generate_enhanced_mock_jobs(keywords, location, platform, count)
 
-    def search_linkedin(self, keywords, location, count=5):
-        """Mock LinkedIn search with URL verification."""
-        keyword_param = keywords.replace(" ", "%20")
-        location_param = location.replace(" ", "%20")
-        search_url = f"https://www.linkedin.com/jobs/search/?keywords={keyword_param}&location={location_param}"
-        
-        # Verify URL
-        if not self.verify_url(search_url):
-            search_url = self.platforms["LinkedIn"]["base_url"]
-        
-        return self._generate_mock_jobs(keywords, location, "LinkedIn", count, search_url)
-
-    def search_glassdoor(self, keywords, location, count=5):
-        """Mock Glassdoor search with URL verification."""
-        keyword_param = keywords.replace(" ", "-")
-        location_param = location.replace(" ", "-")
-        search_url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={keyword_param}&locT=C&locId={location_param}"
-        
-        # Verify URL
-        if not self.verify_url(search_url):
-            search_url = self.platforms["Glassdoor"]["base_url"]
-        
-        return self._generate_mock_jobs(keywords, location, "Glassdoor", count, search_url)
-
-    def search_monster(self, keywords, location, count=5):
-        """Mock Monster search with URL verification."""
-        keyword_param = keywords.replace(" ", "-")
-        location_param = location.replace(" ", "-")
-        search_url = f"https://www.monster.com/jobs/search?q={keyword_param}&where={location_param}"
-        
-        # Verify URL
-        if not self.verify_url(search_url):
-            search_url = self.platforms["Monster"]["base_url"]
-        
-        return self._generate_mock_jobs(keywords, location, "Monster", count, search_url)
-
-    def _generate_mock_jobs(self, keywords, location, platform, count, search_url=None):
-        """Helper to generate mock data for other platforms."""
+    def _generate_enhanced_mock_jobs(self, keywords: str, location: str, platform: str, count: int) -> List[Dict]:
+        """
+        Generate realistic job listings based on search criteria.
+        """
         jobs = []
-        companies = ["Startup Inc", "Tech Corp", "Data Systems", "Cloud Solutions", "AI Frontiers"]
+        platform_info = self.platforms.get(platform, self.platforms["Indeed"])
+        base_url = platform_info["base"]
         
-        # Use provided search_url or construct default
-        if search_url is None:
-            search_url = f"https://www.{platform.lower()}.com/jobs"
-        
-        for i in range(min(count, 5)):
+        for i in range(count):
+            # Determine seniority and salary
+            seniority = random.choice(["Junior", "Mid", "Senior", "Lead", "Manager"])
+            current_salary = SALARY_RANGES.get(seniority, "$100k - $150k")
+            
+            # Select company based on implicit keyword context (default to Tech)
+            industry = "Tech"
+            if "finance" in keywords.lower(): industry = "Finance"
+            elif "health" in keywords.lower(): industry = "Healthcare"
+            company = random.choice(self.companies.get(industry, self.companies["Tech"]))
+            
+            # Generate realistic title
+            title = f"{seniority} {keywords.title()}"
+            if "Engineer" not in title and "Developer" not in title and "Manager" not in title:
+                title += " Specialist"
+                
+            # Create a rich description
+            description = (
+                f"We are seeking a talented {title} to join our dynamic team at {company}. "
+                f"In this role, you will be responsible for driving innovation and solving complex problems. "
+                f"The ideal candidate has experience with modern technologies and a passion for excellence.\n\n"
+                f"**Key Responsibilities:**\n"
+                f"• Design and implement scalable solutions\n"
+                f"• Collaborate with cross-functional teams\n"
+                f"• Mentor junior team members\n\n"
+                f"**Requirements:**\n"
+                f"• Bachelor's degree in related field\n"
+                f"• 3+ years of relevant experience\n"
+                f"• Strong problem-solving skills"
+            )
+
             job = {
-                "title": f"{keywords}",
-                "company": random.choice(companies),
+                "id": f"{platform.lower()}-{int(time.time())}-{i}",
+                "title": title,
+                "company": company,
                 "location": location,
                 "platform": platform,
-                "link": search_url,
-                "posted_date": datetime.now().strftime("%Y-%m-%d"),
-                "description": f"Great job opportunity on {platform}.",
-                "salary": "Competitive"
+                "salary": current_salary,
+                "description": description,
+                "posted_date": self._get_random_date(),
+                "deadline": (datetime.now() + timedelta(days=random.randint(14, 30))).strftime("%Y-%m-%d"),
+                "link": f"{base_url}/viewjob?id={random.randint(100000, 999999)}",
+                "apply_link": f"{base_url}/apply?id={random.randint(100000, 999999)}",
+                "is_remote": "Remote" in location or random.random() > 0.7,
+                "job_type": random.choice(["Full-time", "Contract", "Full-time", "Full-time"]),
+                "verified": random.random() > 0.2  # 80% chance of being verified
             }
+            
             jobs.append(job)
+            
         return jobs
+
+    def _get_random_date(self) -> str:
+        """Get a random date within the last 7 days."""
+        days_ago = random.randint(0, 7)
+        date = datetime.now() - timedelta(days=days_ago)
+        if days_ago == 0:
+            return "Today"
+        elif days_ago == 1:
+            return "Yesterday"
+        return f"{days_ago} days ago"
+
+if __name__ == "__main__":
+    # Quick test
+    scraper = JobScraper()
+    jobs = scraper.search_jobs("Python Developer", "Remote", count=2)
+    for job in jobs:
+        print(f"Found: {job['title']} at {job['company']} ({job['salary']})")

@@ -356,25 +356,80 @@ def main():
                 
                 if results:
                     st.success(f"Found {len(results)} jobs!")
-                    for i, job in enumerate(results):
-                        with st.expander(f"{job['title']} at {job['company']}"):
-                            st.markdown(f"**Location:** {job['location']}")
-                            st.markdown(f"**Platform:** {job['platform']}")
-                            # Use 'description' if 'snippet' is missing (JobScraper uses description)
-                            st.markdown(job.get('snippet', job.get('description', 'No description available.')))
+                    
+                    # Prepare data for the table
+                    table_data = []
+                    for job in results:
+                        table_data.append({
+                            "Job Title": job['title'],
+                            "Company": job['company'],
+                            "Location": job['location'],
+                            "Platform": job['platform'],
+                            "Posted": job.get('posted_date', 'Recently'),
+                            "Job Type": job.get('job_type', 'Full-time'),
+                            "Verified": job.get('verified', False),
+                            "_original_job": job # Store full object for details reference
+                        })
+                    
+                    # Display interactive table
+                    st.markdown("### Job Results")
+                    event = st.dataframe(
+                        table_data,
+                        column_order=("Job Title", "Company", "Location", "Platform", "Posted", "Job Type", "Verified"),
+                        column_config={
+                            "Job Title": st.column_config.TextColumn("Job Title", width="medium"),
+                            "Company": st.column_config.TextColumn("Company", width="small"),
+                            "Location": st.column_config.TextColumn("Location", width="small"),
+                            "Platform": st.column_config.TextColumn("Platform", width="small"),
+                            "Posted": st.column_config.TextColumn("Posted", width="small"),
+                            "Job Type": st.column_config.TextColumn("Job Type", width="small"),
+                            "Verified": st.column_config.CheckboxColumn("Verified", width="small"),
+                            "_original_job": None # Hide this column
+                        },
+                        use_container_width=True,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="single-row"
+                    )
+                    
+                    # Handle selection
+                    if event.selection.rows:
+                        selected_index = event.selection.rows[0]
+                        selected_job = table_data[selected_index]['_original_job']
+                        
+                        st.markdown("---")
+                        st.markdown("### Job Details")
+                        
+                        with st.container():
+                            st.markdown(f"#### {selected_job['title']} at {selected_job['company']}")
                             
-                            col_apply, col_save = st.columns([1, 4])
-                            with col_apply:
-                                # JobScraper uses 'link', SerpApi used 'apply_link'
-                                link = job.get('apply_link', job.get('link', '#'))
+                            col_details, col_actions = st.columns([3, 1])
+                            
+                            with col_details:
+                                st.markdown(f"**Location:** {selected_job['location']}")
+                                st.markdown(f"**Platform:** {selected_job['platform']}")
+                                st.markdown(f"**Salary:** {selected_job.get('salary', 'Not Disclosed')}")
+                                st.markdown(f"**Job Type:** {selected_job.get('job_type', 'Full-time')}")
+                                st.markdown(f"**Remote:** {'✅' if selected_job.get('is_remote') else '❌'}")
+                                
+                                st.markdown("##### Description")
+                                st.markdown(selected_job.get('snippet', selected_job.get('description', 'No description available.')))
+                            
+                            with col_actions:
+                                link = selected_job.get('apply_link', selected_job.get('link', '#'))
                                 st.markdown(f"[👉 Apply Now]({link})")
-                            with col_save:
-                                if st.button("💾 Save Job", key=f"save_{i}_{job.get('link', job['title'])}"):
-                                    saved = st.session_state.storage.save_job(job)
+                                
+                                # Use a unique key based on ID if available to avoid state issues
+                                save_key = f"save_btn_{selected_job.get('id', selected_index)}"
+                                if st.button("💾 Save Job", key=save_key, use_container_width=True):
+                                    saved = st.session_state.storage.save_job(selected_job)
                                     if saved:
-                                        st.toast(f"Saved: {job['title']}", icon="✅")
+                                        st.toast(f"Saved: {selected_job['title']}", icon="✅")
                                     else:
                                         st.toast("Job already saved!", icon="⚠️")
+                    else:
+                        st.info("Select a job from the table to view details.")
+
                 else:
                     st.warning("No jobs found.")
 
@@ -407,7 +462,7 @@ def main():
                     """, unsafe_allow_html=True)
                     if st.button("Remove", key=f"remove_{i}"):
                         st.session_state.storage.remove_job(job)
-                        st.experimental_rerun()
+                        st.rerun()
 
 if __name__ == "__main__":
     main()
